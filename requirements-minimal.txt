@@ -1,0 +1,32 @@
+# Minimal requirements for Phase 3 QA & Automation testing
+# Includes only essential tools and test dependencies
+
+# Testing & QA Tools
+pytest>=7.4.0
+pytest-cov>=4.1.0
+black[jupyter]>=23.11.0
+isort>=5.12.0
+flake8>=6.1.0
+mypy>=1.7.0
+bandit>=1.7.5
+pydocstyle>=6.3.0
+pre-commit>=4.5.0
+locust>=2.17.0
+
+# API & Web
+requests>=2.31.0
+httpx>=0.25.0
+python-dotenv>=1.0.0
+
+# Data Processing (for testing)
+numpy>=1.26.0
+pandas>=2.2.0
+scikit-learn>=1.4.0
+pydantic>=2.5.0
+pyyaml>=6.0
+
+# Optional: For advanced features (uncomment as needed)
+# redis>=5.0.0
+# fastapi>=0.104.0
+# uvicorn>=0.24.0
+# mlflow>=2.8.0

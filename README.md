@@ -67,15 +67,15 @@
 ## 模型热加载验证
 
 ```bash
-Bash# 7. 测试模型热加载 API（验证 Production 模型是否成功加载到推荐服务）
-docker exec -it $CONTAINER python -c \
+# 7. 测试模型热加载 API（验证 Production 模型是否成功加载到推荐服务）
+docker exec -w /app -it $CONTAINER python -c \
   "import requests; print(requests.post('http://localhost:8000/admin/reload-models').json())"
 ```
 
 预期返回（示例）：
 
 ```json
-JSON{
+{
   "status": "success",
   "message": "Models reloaded from Production",
   "current_state": {
@@ -87,3 +87,61 @@ JSON{
   }
 }
 ```
+
+## 开发和贡献
+
+### Phase 3: 质量保障与自动化测试
+
+**一键安装开发工具：**
+
+```bash
+make install-dev
+```
+
+自动创建虚拟环境、安装所有工具、配置 Git 钩子。
+
+**激活虚拟环境：**
+
+```bash
+source venv_py313/bin/activate
+```
+
+**代码质量检查（推荐用于日常开发）：**
+
+```bash
+make ci              # lint + type-check 代码质量检查
+make format          # 自动格式化代码 (Black + isort)
+make lint            # Flake8 + Bandit 检查
+make type-check      # MyPy 类型检查
+make pre-commit      # 所有预提交钩子
+```
+
+**负载测试：**
+
+```bash
+make load-test              # 启动 Locust UI (http://localhost:8089)
+make load-test-headless     # 无界面测试 (5min, 100 users)
+```
+
+**单元测试（需要完整依赖环境）：**
+
+```bash
+make ci-test         # 完整 CI + 单元测试
+make test            # 仅单元测试
+make test-smoke      # 冒烟测试
+```
+
+### Phase 3 工具
+
+| 工具 | 用途 | 配置文件 |
+|------|------|--------|
+| Black | 代码格式化 | pyproject.toml |
+| isort | 导入排序 | pyproject.toml |
+| Flake8 | 代码检查 | .flake8 |
+| MyPy | 类型检查 | pyproject.toml |
+| Bandit | 安全检查 | pyproject.toml |
+| pytest | 单元测试 | pyproject.toml |
+| pre-commit | Git 钩子 | .pre-commit-config.yaml |
+| Locust | 负载测试 | tests/locustfile.py |
+
+

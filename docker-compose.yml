@@ -122,6 +122,30 @@ services:
       - prefect_data:/root/.prefect
     restart: always
 
+  locust-master:
+    image: python:3.11-slim
+    ports:
+      - "8089:8089"  # Locust web UI
+    environment:
+      - LOCUST_MASTER=true
+    depends_on:
+      - spark-master  # Ensure API is running
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: >
+      bash -c "
+        pip install locust requests &&
+        locust -f tests/locustfile.py 
+          --master 
+          --host=http://spark-master:8000 
+          --web 
+          --bind=0.0.0.0 
+          --port=8089
+      "
+    networks:
+      - default
+
 volumes:
   postgres_data:
   redis_data:

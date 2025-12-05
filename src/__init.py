@@ -19,5 +19,5 @@ PERFORMANCE_METRICS = {
     "r2_score": 0.89,
     "dimensionality_reduction": 0.67,
     "ctr_lift": 0.23,
-    "statistical_power": 0.95
+    "statistical_power": 0.95,
 }

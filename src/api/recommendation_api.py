@@ -4,17 +4,17 @@ High-performance FastAPI service
 """
 
 import asyncio
+import os
 import time
-from typing import List, Optional, Dict, Any
 from contextlib import asynccontextmanager
+from typing import Any, Dict, List, Optional
 
+import structlog
 import uvicorn
-from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
+import yaml
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-import structlog
-import yaml
-import os
 
 from ..models.recommendation_engine import RecommendationEngine
 from ..utils.cache import CacheManager
@@ -22,18 +22,22 @@ from ..utils.cache import CacheManager
 logger = structlog.get_logger()
 
 # Load configuration
-config_path = 'config/config.yaml'
+config_path = "config/config.yaml"
 if os.path.exists(config_path):
-    with open(config_path, 'r') as f:
+    with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 else:
     # Default config for container execution
     config = {
-        'api': {'host': '0.0.0.0', 'port': 8000, 'cache_ttl': 300},
-        'mlflow': {'tracking_uri': 'http://mlflow:5000', 'experiment_name': 'recommendation_engine'},
-        'database': {'redis': {'host': 'redis', 'port': 6379, 'db': 0}},
-        'streaming': {'spark': {'app_name': 'RecEngine'}, 'kafka': {}}
+        "api": {"host": "0.0.0.0", "port": 8000, "cache_ttl": 300},
+        "mlflow": {
+            "tracking_uri": "http://mlflow:5000",
+            "experiment_name": "recommendation_engine",
+        },
+        "database": {"redis": {"host": "redis", "port": 6379, "db": 0}},
+        "streaming": {"spark": {"app_name": "RecEngine"}, "kafka": {}},
     }
+
 
 # Models
 class RecommendationRequest(BaseModel):
@@ -41,7 +45,8 @@ class RecommendationRequest(BaseModel):
     num_recommendations: int = Field(default=10, ge=1, le=50)
     exclude_seen: bool = True
     algorithm: str = Field(default="hybrid")
-    
+
+
 class RecommendationResponse(BaseModel):
     user_id: int
     recommendations: List[Dict[str, Any]]
@@ -49,23 +54,26 @@ class RecommendationResponse(BaseModel):
     response_time_ms: float
     cache_hit: bool
 
+
 class HealthResponse(BaseModel):
     status: str
     active_models: List[str]
 
+
 # Global state
 recommendation_engine = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan management"""
     global recommendation_engine
-    
+
     logger.info("Starting Recommendation API...")
-    
+
     # Initialize Engine
     recommendation_engine = RecommendationEngine(config)
-    
+
     # Initial Model Load
     try:
         await recommendation_engine.load_models()
@@ -73,10 +81,11 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Error loading models during startup: {e}")
         # Continue startup even if model load fails (allow for retry later)
-    
+
     yield
-    
+
     logger.info("Shutting down...")
+
 
 app = FastAPI(title="Recommendation API", lifespan=lifespan)
 
@@ -88,43 +97,47 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 async def get_recommendation_engine() -> RecommendationEngine:
     if recommendation_engine is None:
         raise HTTPException(status_code=503, detail="Engine not initialized")
     return recommendation_engine
+
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check(engine: RecommendationEngine = Depends(get_recommendation_engine)):
     active_models = await engine.get_active_models()
     return HealthResponse(status="healthy", active_models=active_models)
 
+
 @app.post("/recommendations", response_model=RecommendationResponse)
 async def get_recommendations(
     request: RecommendationRequest,
-    engine: RecommendationEngine = Depends(get_recommendation_engine)
+    engine: RecommendationEngine = Depends(get_recommendation_engine),
 ):
     start_time = time.time()
-    
+
     recs = await engine.get_recommendations(
         user_id=request.user_id,
         num_recommendations=request.num_recommendations,
         algorithm=request.algorithm,
-        exclude_seen=request.exclude_seen
+        exclude_seen=request.exclude_seen,
     )
-    
+
     return RecommendationResponse(
         user_id=request.user_id,
         recommendations=recs,
         algorithm_used=request.algorithm,
         response_time_ms=(time.time() - start_time) * 1000,
-        cache_hit=False
+        cache_hit=False,
     )
+
 
 # --- 新增：Admin Endpoint 实现热加载 ---
 @app.post("/admin/reload-models")
 async def reload_models(
     background_tasks: BackgroundTasks,
-    engine: RecommendationEngine = Depends(get_recommendation_engine)
+    engine: RecommendationEngine = Depends(get_recommendation_engine),
 ):
     """
     Force reload models from MLflow Registry (Production stage).
@@ -134,17 +147,18 @@ async def reload_models(
         logger.info("Received request to reload models...")
         # Await the reload (this might take a few seconds)
         await engine.load_models()
-        
+
         # Get new status
         stats = await engine.get_model_stats()
         return {
-            "status": "success", 
+            "status": "success",
             "message": "Models reloaded from Production",
-            "current_state": stats
+            "current_state": stats,
         }
     except Exception as e:
         logger.error(f"Failed to reload models: {e}")
         raise HTTPException(status_code=500, detail=f"Reload failed: {str(e)}")
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
