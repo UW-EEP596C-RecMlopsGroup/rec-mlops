@@ -2,7 +2,7 @@
 Real-Time Recommendation Engine
 A high-performance collaborative filtering system with sub-100ms latency
 """
-#test CI
+# test CI
 __version__ = "1.0.0"
 __author__ = "Jay Guwalani"
 __email__ = "jguwalan@umd.edu"
@@ -21,3 +21,4 @@ PERFORMANCE_METRICS = {
     "ctr_lift": 0.23,
     "statistical_power": 0.95,
 }
+
