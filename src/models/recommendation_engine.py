@@ -10,7 +10,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 import mlflow
-import mlflow.sklearn
+from mlflow import sklearn
 import numpy as np
 import pandas as pd
 import structlog
