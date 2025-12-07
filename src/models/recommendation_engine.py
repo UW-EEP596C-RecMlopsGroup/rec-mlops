@@ -22,8 +22,12 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 
-from ..streaming.kafka_producer import KafkaProducer
 from ..utils.metrics import calculate_coverage, calculate_hit_rate, calculate_map, calculate_ndcg
+
+def load_kafka_producer():
+    from ..streaming.kafka_producer import KafkaProducer
+    return KafkaProducer
+
 
 logger = structlog.get_logger()
 

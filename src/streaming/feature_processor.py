@@ -4,6 +4,7 @@ Processes user interactions and updates features with 67% dimensionality reducti
 """
 
 import asyncio
+from importlib.resources import path
 import time
 from typing import Any, Dict, List, Optional
 
@@ -11,7 +12,6 @@ import numpy as np
 import pandas as pd
 import structlog
 import yaml
-from delta.tables import DeltaTable
 from pyspark.ml import Pipeline
 from pyspark.ml.feature import PCA, StandardScaler, VectorAssembler
 from pyspark.ml.stat import Correlation
@@ -21,6 +21,10 @@ from pyspark.sql.types import *
 from pyspark.streaming import StreamingContext
 
 logger = structlog.get_logger()
+
+def get_delta_table():
+    from delta.tables import DeltaTable
+    return DeltaTable
 
 
 class FeatureProcessor:

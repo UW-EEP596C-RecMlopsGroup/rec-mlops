@@ -16,6 +16,10 @@ import structlog
 
 logger = structlog.get_logger()
 
+def get_redis():
+    import redis.asyncio as redis
+    return redis
+
 
 class CacheManager:
     """High-performance Redis cache manager with async support"""
@@ -41,7 +45,7 @@ class CacheManager:
                 socket_keepalive_options={},
                 health_check_interval=30,
             )
-
+            redis = get_redis()
             self.redis_client = redis.Redis(connection_pool=self.connection_pool)
             logger.info("Redis connection pool initialized")
 
