@@ -46,7 +46,6 @@ hypothesis==6.88.1
 # Async
 asyncio==3.4.3
 aiofiles==23.2.1
-aioredis==2.0.1
 
 # Utilities
 click==8.1.7
