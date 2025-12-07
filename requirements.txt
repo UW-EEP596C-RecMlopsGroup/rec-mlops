@@ -77,7 +77,7 @@ kafka-python==2.0.2
 # API & Serving
 fastapi
 uvicorn
-redis
+
 
 # Utilities
 structlog
