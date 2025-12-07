@@ -368,3 +368,4 @@ async def main():
 if __name__ == "__main__":
     print_info("Starting Real-Time Recommendation Engine Demo...")
     asyncio.run(main())
+    print("This is a CICD test message.")
