@@ -184,7 +184,8 @@ def _record_request_metrics(
 def metrics_endpoint():
     """Expose Prometheus metrics or a minimal uptime metric if unavailable."""
     if HAS_PROMETHEUS:
-        return Response(content=get_metrics(), media_type=PROMETHEUS_CONTENT_TYPE)
+        # PlainTextResponse avoids duplicating charset values in the header
+        return PlainTextResponse(content=get_metrics())
 
     uptime = _uptime_seconds()
     body = f"rec_api_uptime_seconds {uptime:.2f}\n"
