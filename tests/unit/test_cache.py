@@ -22,7 +22,7 @@ class TestCacheManager:
     def cache_manager(self):
         """Create a cache manager instance"""
         with patch("redis.Redis"):
-            return CacheManager(host="localhost", port=6379, db=0)
+            return CacheManager({"host": "localhost", "port": 6379, "db": 0})
 
     def test_cache_initialization(self, cache_manager):
         """Test cache manager initialization"""

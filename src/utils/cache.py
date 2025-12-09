@@ -1,410 +1,242 @@
-"""
-High-Performance Caching Layer
-Redis-based caching for sub-100ms recommendation serving
-"""
+"""Caching utilities used by the recommendation API and engines."""
 
-import asyncio
 import hashlib
 import json
 import pickle
+import threading
 import time
-from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import structlog
 
+try:  # pragma: no cover - redis is optional in tests
+    import redis  # type: ignore
+except Exception:  # pragma: no cover - CI fallback
+    redis = None
+
+
 logger = structlog.get_logger()
+JSON_PREFIX = b"J"
+PICKLE_PREFIX = b"P"
 
-def get_redis():
-    try:
-        import redis.asyncio as redis  # 真环境有 Redis
-        return redis
-    except Exception:
-        from unittest import mock      # CI 环境没有 Redis → 自动 fallback mock
-        return mock.MagicMock()
 
+class _InMemoryBackend:
+    """Simple in-memory fallback used when Redis is unavailable."""
+
+    def __init__(self):
+        self._store: Dict[str, Any] = {}
+        self._lock = threading.Lock()
+
+    def set(self, key: str, value: bytes, ttl: Optional[int]) -> None:
+        expire_at = time.time() + ttl if ttl else None
+        with self._lock:
+            self._store[key] = (value, expire_at)
+
+    def get(self, key: str) -> Optional[bytes]:
+        with self._lock:
+            payload = self._store.get(key)
+            if not payload:
+                return None
+            value, expire_at = payload
+            if expire_at and expire_at < time.time():
+                self._store.pop(key, None)
+                return None
+            return value
+
+    def delete(self, key: str) -> bool:
+        with self._lock:
+            return self._store.pop(key, None) is not None
+
+    def clear(self) -> None:
+        with self._lock:
+            self._store.clear()
+
+    def keys(self) -> List[str]:
+        with self._lock:
+            return list(self._store.keys())
 
 
 class CacheManager:
-    """High-performance Redis cache manager with async support"""
+    """Synchronous cache wrapper with Redis and in-memory backends."""
 
-    def __init__(self, redis_config: Dict[str, Any]):
-        self.config = redis_config
-        self.redis_client = None
-        self.connection_pool = None
-        self._initialize_connection()
+    def __init__(self, redis_config: Optional[Dict[str, Any]] = None, **kwargs: Any):
+        config = dict(redis_config or {})
+        config.update(kwargs)
 
-    def _initialize_connection(self):
-        """Initialize Redis connection pool"""
+        self.host = config.get("host", "localhost")
+        self.port = config.get("port", 6379)
+        self.db = config.get("db", 0)
+        self.password = config.get("password")
+        self.ttl = config.get("ttl", 300)
+        self.namespace = config.get("namespace", "rec")
+
+        self.client = self._create_client()
+        self._fallback = _InMemoryBackend()
+
+    def _create_client(self):
+        if redis is None:
+            return None
+
         try:
-            # Create connection pool for better performance
-            self.connection_pool = redis.ConnectionPool(
-                host=self.config.get("host", "localhost"),
-                port=self.config.get("port", 6379),
-                db=self.config.get("db", 0),
-                password=self.config.get("password"),
-                max_connections=20,
-                retry_on_timeout=True,
-                socket_keepalive=True,
-                socket_keepalive_options={},
-                health_check_interval=30,
-            )
-            redis = get_redis()
-            self.client = redis.Redis(connection_pool=self.connection_pool)
-            logger.info("Redis connection pool initialized")
+            return redis.Redis(host=self.host, port=self.port, db=self.db, password=self.password)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("Falling back to in-memory cache: %s", exc)
+            return None
 
-        except Exception as e:
-            logger.error(f"Failed to initialize Redis connection: {e}")
-            raise
-
-    async def get(self, key: str, default: Any = None) -> Any:
-        """Get value from cache with automatic deserialization"""
+    def _serialize(self, value: Any) -> bytes:
         try:
-            cached_value = await self.redis_client.get(key)
+            return JSON_PREFIX + json.dumps(value).encode("utf-8")
+        except (TypeError, ValueError):
+            return PICKLE_PREFIX + pickle.dumps(value)
 
-            if cached_value is None:
-                return default
+    def _deserialize(self, value: bytes) -> Any:
+        if not value:
+            return None
+        prefix, payload = value[:1], value[1:]
+        if prefix == JSON_PREFIX:
+            return json.loads(payload.decode("utf-8"))
+        if prefix == PICKLE_PREFIX:
+            return pickle.loads(payload)
+        return payload
 
-            # Try JSON deserialization first (faster)
-            try:
-                return json.loads(cached_value)
-            except (json.JSONDecodeError, UnicodeDecodeError):
-                # Fallback to pickle for complex objects
-                return pickle.loads(cached_value)
-
-        except Exception as e:
-            logger.warning(f"Cache get error for key {key}: {e}")
-            return default
-
-    async def set(
-        self, key: str, value: Any, ttl: Optional[int] = None, serialize_json: bool = True
-    ) -> bool:
-        """Set value in cache with automatic serialization"""
-        try:
-            # Choose serialization method
-            if serialize_json:
-                try:
-                    serialized_value = json.dumps(value)
-                except (TypeError, ValueError):
-                    # Fallback to pickle for complex objects
-                    serialized_value = pickle.dumps(value)
-                    serialize_json = False
-            else:
-                serialized_value = pickle.dumps(value)
-
-            # Set with TTL if provided
+    def _store(self, key: str, payload: bytes, ttl: Optional[int]) -> None:
+        if self.client:
             if ttl:
-                success = await self.redis_client.setex(key, ttl, serialized_value)
+                self.client.setex(key, ttl, payload)
             else:
-                success = await self.redis_client.set(key, serialized_value)
+                self.client.set(key, payload)
+            return
+        self._fallback.set(key, payload, ttl)
 
-            return bool(success)
+    def set(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
+        payload = self._serialize(value)
+        self._store(key, payload, ttl or self.ttl)
+        return True
 
-        except Exception as e:
-            logger.error(f"Cache set error for key {key}: {e}")
-            return False
+    def get(self, key: str, default: Any = None) -> Any:
+        if self.client:
+            raw = self.client.get(key)
+        else:
+            raw = self._fallback.get(key)
+        if raw is None:
+            return default
+        return self._deserialize(raw)
 
-    async def delete(self, key: str) -> bool:
-        """Delete key from cache"""
-        try:
-            deleted_count = await self.redis_client.delete(key)
-            return deleted_count > 0
-        except Exception as e:
-            logger.error(f"Cache delete error for key {key}: {e}")
-            return False
+    def delete(self, key: str) -> bool:
+        if self.client:
+            return bool(self.client.delete(key))
+        return self._fallback.delete(key)
 
-    async def exists(self, key: str) -> bool:
-        """Check if key exists in cache"""
-        try:
-            return bool(await self.redis_client.exists(key))
-        except Exception as e:
-            logger.error(f"Cache exists check error for key {key}: {e}")
-            return False
+    def clear(self) -> None:
+        if self.client:
+            try:
+                keys = self.client.keys("*")
+                if keys:
+                    self.client.delete(*keys)
+                else:
+                    self.client.flushdb()
+            except Exception as exc:  # pragma: no cover
+                logger.warning("Failed to clear Redis cache: %s", exc)
+        self._fallback.clear()
 
-    async def get_multiple(self, keys: List[str]) -> Dict[str, Any]:
-        """Get multiple values from cache efficiently"""
-        try:
-            if not keys:
-                return {}
+    def exists(self, key: str) -> bool:
+        if self.client:
+            return bool(self.client.exists(key))
+        return self._fallback.get(key) is not None
 
-            values = await self.redis_client.mget(keys)
-            result = {}
+    def increment(self, key: str, amount: int = 1) -> int:
+        if self.client:
+            return int(self.client.incrby(key, amount))
 
-            for key, value in zip(keys, values):
-                if value is not None:
-                    try:
-                        result[key] = json.loads(value)
-                    except (json.JSONDecodeError, UnicodeDecodeError):
-                        result[key] = pickle.loads(value)
+        raw = self._fallback.get(key)
+        current = int(self._deserialize(raw)) if raw else 0
+        current += amount
+        self._store(key, JSON_PREFIX + json.dumps(current).encode("utf-8"), None)
+        return current
 
-            return result
-
-        except Exception as e:
-            logger.error(f"Cache mget error: {e}")
-            return {}
-
-    async def set_multiple(
-        self, key_value_pairs: Dict[str, Any], ttl: Optional[int] = None
-    ) -> bool:
-        """Set multiple values in cache efficiently"""
-        try:
-            if not key_value_pairs:
-                return True
-
-            # Prepare serialized data
-            serialized_pairs = {}
-            for key, value in key_value_pairs.items():
-                try:
-                    serialized_pairs[key] = json.dumps(value)
-                except (TypeError, ValueError):
-                    serialized_pairs[key] = pickle.dumps(value)
-
-            # Use pipeline for atomic operations
-            async with self.redis_client.pipeline() as pipe:
-                await pipe.mset(serialized_pairs)
-
-                if ttl:
-                    for key in serialized_pairs.keys():
-                        await pipe.expire(key, ttl)
-
-                await pipe.execute()
-
-            return True
-
-        except Exception as e:
-            logger.error(f"Cache mset error: {e}")
-            return False
-
-    async def increment(self, key: str, amount: int = 1) -> Optional[int]:
-        """Increment a counter in cache"""
-        try:
-            return await self.redis_client.incrby(key, amount)
-        except Exception as e:
-            logger.error(f"Cache increment error for key {key}: {e}")
-            return None
-
-    async def get_ttl(self, key: str) -> Optional[int]:
-        """Get TTL of a key"""
-        try:
-            ttl = await self.redis_client.ttl(key)
+    def get_ttl(self, key: str) -> Optional[int]:
+        if self.client:
+            ttl = self.client.ttl(key)
             return ttl if ttl >= 0 else None
-        except Exception as e:
-            logger.error(f"Cache TTL check error for key {key}: {e}")
-            return None
+        # In-memory backend uses per-key expirations, so approximate
+        return None
 
-    async def flush_db(self) -> bool:
-        """Flush all keys from current database"""
-        try:
-            await self.redis_client.flushdb()
-            logger.info("Cache database flushed")
-            return True
-        except Exception as e:
-            logger.error(f"Cache flush error: {e}")
-            return False
-
-    async def get_stats(self) -> Dict[str, Any]:
-        """Get cache statistics"""
-        try:
-            info = await self.redis_client.info()
-
+    def get_stats(self) -> Dict[str, Any]:
+        if self.client:
+            info = self.client.info()
+            hits = info.get("keyspace_hits", 0)
+            misses = info.get("keyspace_misses", 0)
+            total = hits + misses
             return {
                 "connected_clients": info.get("connected_clients", 0),
                 "used_memory": info.get("used_memory", 0),
-                "used_memory_human": info.get("used_memory_human", "0B"),
-                "keyspace_hits": info.get("keyspace_hits", 0),
-                "keyspace_misses": info.get("keyspace_misses", 0),
-                "total_commands_processed": info.get("total_commands_processed", 0),
-                "hit_rate": self._calculate_hit_rate(
-                    info.get("keyspace_hits", 0), info.get("keyspace_misses", 0)
-                ),
+                "hit_rate": hits / total if total else 0.0,
             }
-        except Exception as e:
-            logger.error(f"Error getting cache stats: {e}")
-            return {}
 
-    def _calculate_hit_rate(self, hits: int, misses: int) -> float:
-        """Calculate cache hit rate"""
-        total = hits + misses
-        return (hits / total) if total > 0 else 0.0
+        return {
+            "connected_clients": 1,
+            "used_memory": len(self._fallback.keys()),
+            "hit_rate": 1.0,
+        }
 
-    async def close(self):
-        """Close Redis connection"""
-        if self.redis_client:
-            await self.redis_client.close()
-        if self.connection_pool:
-            await self.connection_pool.disconnect()
-        logger.info("Redis connection closed")
+    def close(self) -> None:
+        if self.client and hasattr(self.client, "close"):
+            try:
+                self.client.close()
+            except Exception:  # pragma: no cover
+                pass
+
+    def _generate_key(self, namespace: str, identifier: Any) -> str:
+        raw = f"{namespace}:{identifier}"
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 class RecommendationCache:
-    """Specialized cache for recommendation data"""
+    """Domain-specific helper built on top of CacheManager."""
 
     def __init__(self, cache_manager: CacheManager):
         self.cache = cache_manager
-        self.default_ttl = 1800  # 30 minutes
+        self.default_ttl = cache_manager.ttl or 1800
 
-    def _get_user_rec_key(self, user_id: int, algorithm: str, num_recs: int) -> str:
-        """Generate cache key for user recommendations"""
-        return f"rec:user:{user_id}:{algorithm}:{num_recs}"
+    def _user_rec_key(self, user_id: int, algorithm: str, count: int) -> str:
+        return f"rec:{user_id}:{algorithm}:{count}"
 
-    def _get_user_profile_key(self, user_id: int) -> str:
-        """Generate cache key for user profile"""
-        return f"profile:user:{user_id}"
+    def get_recommendations(self, user_id: int, algorithm: str, num_recommendations: int):
+        key = self._user_rec_key(user_id, algorithm, num_recommendations)
+        return self.cache.get(key)
 
-    def _get_item_features_key(self, item_id: int) -> str:
-        """Generate cache key for item features"""
-        return f"features:item:{item_id}"
-
-    def _get_model_key(self, model_type: str, version: str) -> str:
-        """Generate cache key for model artifacts"""
-        return f"model:{model_type}:{version}"
-
-    async def get_recommendations(
-        self, user_id: int, algorithm: str, num_recommendations: int
-    ) -> Optional[List[Dict]]:
-        """Get cached recommendations for user"""
-        key = self._get_user_rec_key(user_id, algorithm, num_recommendations)
-        return await self.cache.get(key)
-
-    async def set_recommendations(
+    def set_recommendations(
         self,
         user_id: int,
         algorithm: str,
         num_recommendations: int,
-        recommendations: List[Dict],
+        recommendations: List[Dict[str, Any]],
         ttl: Optional[int] = None,
     ) -> bool:
-        """Cache recommendations for user"""
-        key = self._get_user_rec_key(user_id, algorithm, num_recommendations)
-        return await self.cache.set(key, recommendations, ttl or self.default_ttl)
-
-    async def get_user_profile(self, user_id: int) -> Optional[Dict]:
-        """Get cached user profile"""
-        key = self._get_user_profile_key(user_id)
-        return await self.cache.get(key)
-
-    async def set_user_profile(
-        self, user_id: int, profile: Dict, ttl: Optional[int] = None
-    ) -> bool:
-        """Cache user profile"""
-        key = self._get_user_profile_key(user_id)
-        return await self.cache.set(key, profile, ttl or 3600)  # 1 hour default
-
-    async def get_item_features(self, item_id: int) -> Optional[Dict]:
-        """Get cached item features"""
-        key = self._get_item_features_key(item_id)
-        return await self.cache.get(key)
-
-    async def set_item_features(
-        self, item_id: int, features: Dict, ttl: Optional[int] = None
-    ) -> bool:
-        """Cache item features"""
-        key = self._get_item_features_key(item_id)
-        return await self.cache.set(key, features, ttl or 7200)  # 2 hours default
-
-    async def invalidate_user_cache(self, user_id: int) -> bool:
-        """Invalidate all cache entries for a user"""
-        try:
-            # Find all user-related keys
-            pattern = f"*:user:{user_id}:*"
-            keys = []
-
-            # Scan for keys (use cursor to handle large datasets)
-            cursor = 0
-            while True:
-                cursor, found_keys = await self.cache.redis_client.scan(
-                    cursor, match=pattern, count=100
-                )
-                keys.extend([key.decode() for key in found_keys])
-                if cursor == 0:
-                    break
-
-            # Delete all found keys
-            if keys:
-                deleted = await self.cache.redis_client.delete(*keys)
-                logger.info(f"Invalidated {deleted} cache entries for user {user_id}")
-                return deleted > 0
-
-            return True
-
-        except Exception as e:
-            logger.error(f"Error invalidating cache for user {user_id}: {e}")
-            return False
-
-    async def warm_cache(self, user_ids: List[int], recommendations_data: Dict):
-        """Warm cache with pre-computed recommendations"""
-        try:
-            cache_pairs = {}
-
-            for user_id in user_ids:
-                if user_id in recommendations_data:
-                    for algorithm, recs in recommendations_data[user_id].items():
-                        key = self._get_user_rec_key(user_id, algorithm, len(recs))
-                        cache_pairs[key] = recs
-
-            success = await self.cache.set_multiple(cache_pairs, self.default_ttl)
-            logger.info(f"Cache warmed for {len(user_ids)} users")
-            return success
-
-        except Exception as e:
-            logger.error(f"Error warming cache: {e}")
-            return False
+        key = self._user_rec_key(user_id, algorithm, num_recommendations)
+        return self.cache.set(key, recommendations, ttl or self.default_ttl)
 
 
-# Performance monitoring decorator
 def cache_performance_monitor(func):
-    """Decorator to monitor cache performance"""
+    """Decorator that logs slow cache operations."""
 
-    async def wrapper(*args, **kwargs):
+    def wrapper(*args, **kwargs):
         start_time = time.time()
-        result = await func(*args, **kwargs)
-        duration = (time.time() - start_time) * 1000
-
-        # Log slow cache operations
-        if duration > 10:  # 10ms threshold
-            logger.warning(f"Slow cache operation: {func.__name__} took {duration:.2f}ms")
-
+        result = func(*args, **kwargs)
+        duration_ms = (time.time() - start_time) * 1000
+        if duration_ms > 10:
+            logger.warning("Slow cache op %s took %.2f ms", func.__name__, duration_ms)
         return result
 
     return wrapper
 
 
-# Example usage
-async def example_usage():
-    """Example of how to use the cache manager"""
-
-    # Initialize cache
-    redis_config = {"host": "localhost", "port": 6379, "db": 0}
-
-    cache_manager = CacheManager(redis_config)
-    rec_cache = RecommendationCache(cache_manager)
-
-    try:
-        # Cache some recommendations
-        recommendations = [
-            {"item_id": 1, "score": 0.95},
-            {"item_id": 2, "score": 0.87},
-            {"item_id": 3, "score": 0.82},
-        ]
-
-        await rec_cache.set_recommendations(
-            user_id=123, algorithm="hybrid", num_recommendations=3, recommendations=recommendations
-        )
-
-        # Retrieve recommendations
-        cached_recs = await rec_cache.get_recommendations(
-            user_id=123, algorithm="hybrid", num_recommendations=3
-        )
-
-        print(f"Cached recommendations: {cached_recs}")
-
-        # Get cache stats
-        stats = await cache_manager.get_stats()
-        print(f"Cache stats: {stats}")
-
-    finally:
-        await cache_manager.close()
+def example_usage():  # pragma: no cover - documentation helper
+    cache = CacheManager({"ttl": 10})
+    cache.set("demo", {"items": [1, 2, 3]})
+    print(cache.get("demo"))
+    cache.clear()
 
 
-if __name__ == "__main__":
-    asyncio.run(example_usage())
+if __name__ == "__main__":  # pragma: no cover
+    example_usage()
