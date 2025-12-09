@@ -2,7 +2,6 @@
 Prefect Flow for Recommendation Model Retraining (Phase 2 Updated)
 """
 
-import mlflow
 import structlog
 from prefect import flow
 

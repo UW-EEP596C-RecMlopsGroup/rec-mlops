@@ -2,14 +2,10 @@
 Unit tests for the recommendation API
 """
 
-import asyncio
-import json
-
 # Mock the modules to avoid import errors during testing
 import sys
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 # Mock the heavy dependencies
@@ -19,7 +15,7 @@ sys.modules["delta"] = MagicMock()
 sys.modules["mlflow"] = MagicMock()
 
 # Now we can import our API
-from src.api.recommendation_api import app
+from src.api.recommendation_api import app  # noqa: E402
 
 client = TestClient(app)
 
@@ -71,7 +67,7 @@ class TestRecommendationAPI:
         assert len(data["recommendations"]) == 3
         assert data["algorithm_used"] == "hybrid"
         assert "response_time_ms" in data
-        assert data["cache_hit"] == False
+        assert data["cache_hit"] is False
 
     @patch("src.api.recommendation_api.cache_manager")
     def test_get_recommendations_cache_hit(self, mock_cache):
@@ -87,7 +83,7 @@ class TestRecommendationAPI:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["cache_hit"] == True
+        assert data["cache_hit"] is True
         assert data["recommendations"] == cached_recommendations
 
     def test_get_recommendations_invalid_input(self):

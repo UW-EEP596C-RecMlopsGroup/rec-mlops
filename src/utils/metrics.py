@@ -5,12 +5,10 @@ Comprehensive evaluation metrics including NDCG, MAP, Hit Rate, Coverage, and RM
 
 import time
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
-import pandas as pd
 import structlog
-from scipy.stats import rankdata
 from sklearn.metrics import mean_squared_error, r2_score
 
 logger = structlog.get_logger()

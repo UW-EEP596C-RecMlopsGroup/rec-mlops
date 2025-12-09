@@ -4,21 +4,16 @@ Processes user interactions and updates features with 67% dimensionality reducti
 """
 
 import asyncio
-from importlib.resources import path
-import time
 from typing import Any, Dict, List, Optional
 
 import numpy as np
-import pandas as pd
 import structlog
 import yaml
 from pyspark.ml import Pipeline
 from pyspark.ml.feature import PCA, StandardScaler, VectorAssembler
-from pyspark.ml.stat import Correlation
 from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql.functions import *
-from pyspark.sql.types import *
-from pyspark.streaming import StreamingContext
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
 
 logger = structlog.get_logger()
 
@@ -111,15 +106,15 @@ class FeatureProcessor:
         """Process real-time user interactions from Kafka"""
 
         # Define schema for user interactions
-        interaction_schema = StructType(
+        interaction_schema = T.StructType(
             [
-                StructField("user_id", LongType(), True),
-                StructField("item_id", LongType(), True),
-                StructField("rating", DoubleType(), True),
-                StructField("interaction_type", StringType(), True),
-                StructField("timestamp", DoubleType(), True),
-                StructField("session_id", StringType(), True),
-                StructField("context", MapType(StringType(), StringType()), True),
+                T.StructField("user_id", T.LongType(), True),
+                T.StructField("item_id", T.LongType(), True),
+                T.StructField("rating", T.DoubleType(), True),
+                T.StructField("interaction_type", T.StringType(), True),
+                T.StructField("timestamp", T.DoubleType(), True),
+                T.StructField("session_id", T.StringType(), True),
+                T.StructField("context", T.MapType(T.StringType(), T.StringType()), True),
             ]
         )
 
@@ -135,7 +130,7 @@ class FeatureProcessor:
 
         # Parse JSON messages
         parsed_interactions = interactions_stream.select(
-            from_json(col("value").cast("string"), interaction_schema).alias("data")
+            F.from_json(F.col("value").cast("string"), interaction_schema).alias("data")
         ).select("data.*")
 
         # Add derived features
@@ -155,28 +150,29 @@ class FeatureProcessor:
         """Add derived features to interaction data"""
 
         # Convert timestamp to proper datetime
-        df = df.withColumn("interaction_time", from_unixtime(col("timestamp")))
+        df = df.withColumn("interaction_time", F.from_unixtime(F.col("timestamp")))
 
         # Time-based features
         df = (
-            df.withColumn("hour_of_day", hour(col("interaction_time")))
-            .withColumn("day_of_week", dayofweek(col("interaction_time")))
+            df.withColumn("hour_of_day", F.hour(F.col("interaction_time")))
+            .withColumn("day_of_week", F.dayofweek(F.col("interaction_time")))
             .withColumn(
-                "is_weekend", when(dayofweek(col("interaction_time")).isin([1, 7]), 1).otherwise(0)
+                "is_weekend",
+                F.when(F.dayofweek(F.col("interaction_time")).isin([1, 7]), 1).otherwise(0),
             )
         )
 
         # Session-based features (would require windowing in real implementation)
-        df = df.withColumn("session_duration", lit(0.0))  # Placeholder
-        df = df.withColumn("interactions_in_session", lit(1))  # Placeholder
+        df = df.withColumn("session_duration", F.lit(0.0))  # Placeholder
+        df = df.withColumn("interactions_in_session", F.lit(1))  # Placeholder
 
         # User behavior features (would require lookups to user profile tables)
-        df = df.withColumn("user_avg_rating", lit(3.5))  # Placeholder
-        df = df.withColumn("user_interaction_count", lit(100))  # Placeholder
+        df = df.withColumn("user_avg_rating", F.lit(3.5))  # Placeholder
+        df = df.withColumn("user_interaction_count", F.lit(100))  # Placeholder
 
         # Item features (would require lookups to item catalog)
-        df = df.withColumn("item_popularity", lit(0.5))  # Placeholder
-        df = df.withColumn("item_avg_rating", lit(4.0))  # Placeholder
+        df = df.withColumn("item_popularity", F.lit(0.5))  # Placeholder
+        df = df.withColumn("item_avg_rating", F.lit(4.0))  # Placeholder
 
         return df
 
@@ -216,20 +212,20 @@ class FeatureProcessor:
         user_features = (
             df.select("user_id")
             .distinct()
-            .withColumn("user_age", (rand() * 50 + 18).cast("int"))
-            .withColumn("user_gender", when(rand() > 0.5, "M").otherwise("F"))
-            .withColumn("user_location", lit("US"))
-            .withColumn("user_tenure_days", (rand() * 365).cast("int"))
+            .withColumn("user_age", (F.rand() * 50 + 18).cast("int"))
+            .withColumn("user_gender", F.when(F.rand() > 0.5, "M").otherwise("F"))
+            .withColumn("user_location", F.lit("US"))
+            .withColumn("user_tenure_days", (F.rand() * 365).cast("int"))
         )
 
         # Mock item features (in production, would join with item catalog)
         item_features = (
             df.select("item_id")
             .distinct()
-            .withColumn("item_category", lit("electronics"))
-            .withColumn("item_price", rand() * 1000)
-            .withColumn("item_brand", lit("Brand_A"))
-            .withColumn("item_age_days", (rand() * 365).cast("int"))
+            .withColumn("item_category", F.lit("electronics"))
+            .withColumn("item_price", F.rand() * 1000)
+            .withColumn("item_brand", F.lit("Brand_A"))
+            .withColumn("item_age_days", (F.rand() * 365).cast("int"))
         )
 
         # Join features
@@ -294,10 +290,10 @@ class FeatureProcessor:
         try:
             # Aggregate user features
             user_profiles = df.groupBy("user_id").agg(
-                avg("rating").alias("avg_rating"),
-                count("*").alias("interaction_count"),
-                max("timestamp").alias("last_interaction"),
-                collect_set("item_id").alias("interacted_items"),
+                F.avg("rating").alias("avg_rating"),
+                F.count("*").alias("interaction_count"),
+                F.max("timestamp").alias("last_interaction"),
+                F.collect_set("item_id").alias("interacted_items"),
             )
 
             # Write to Delta Lake (merge/upsert)
@@ -315,10 +311,10 @@ class FeatureProcessor:
         try:
             # Aggregate item features
             item_features = df.groupBy("item_id").agg(
-                avg("rating").alias("avg_rating"),
-                count("*").alias("interaction_count"),
-                countDistinct("user_id").alias("unique_users"),
-                max("timestamp").alias("last_interaction"),
+                F.avg("rating").alias("avg_rating"),
+                F.count("*").alias("interaction_count"),
+                F.countDistinct("user_id").alias("unique_users"),
+                F.max("timestamp").alias("last_interaction"),
             )
 
             # Write to Delta Lake

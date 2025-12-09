@@ -16,9 +16,7 @@ sys.modules["pyspark.sql"] = MagicMock()
 sys.modules["delta"] = MagicMock()
 sys.modules["mlflow"] = MagicMock()
 
-from src.models.recommendation_engine import RecommendationEngine
-
-
+from src.models.recommendation_engine import RecommendationEngine  # noqa: E402
 class TestRecommendationEngine:
     """Test cases for the recommendation engine"""
 
@@ -279,6 +277,7 @@ class TestRecommendationEngine:
 
         # Should still return recommendations (using average user profile)
         assert len(recommendations) > 0
-
-
  
+ 
+
+

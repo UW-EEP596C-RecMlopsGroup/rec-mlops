@@ -3,26 +3,20 @@ Advanced Recommendation Engine with Matrix Factorization
 Implements SVD, NMF, and hybrid algorithms with high-performance optimizations
 """
 
-import asyncio
-import os
-import pickle
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import mlflow
-from mlflow import sklearn
 import numpy as np
 import pandas as pd
 import structlog
-from delta import DeltaTable, configure_spark_with_delta_pip  # <--- 关键修改：导入配置工具
+from delta import configure_spark_with_delta_pip  # <--- 关键修改：导入配置工具
 from pyspark.sql import SparkSession
 from sklearn.decomposition import NMF, TruncatedSVD
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 
 from ..utils.metrics import calculate_coverage, calculate_hit_rate, calculate_map, calculate_ndcg
+
 
 def load_kafka_producer():
     from ..streaming.kafka_producer import KafkaProducer
@@ -217,8 +211,6 @@ class RecommendationEngine:
         exclude_seen: bool = True,
     ) -> List[Dict[str, Any]]:
         """Generate recommendations"""
-        start_time = time.time()
-
         try:
             # Safety check
             if self.user_item_matrix is None:
@@ -237,7 +229,6 @@ class RecommendationEngine:
                     user_id, num_recommendations, exclude_seen
                 )
 
-            response_time = (time.time() - start_time) * 1000
             return recommendations
 
         except Exception as e:
@@ -250,8 +241,6 @@ class RecommendationEngine:
         # Mock implementation for demo stability if model fails
         if "svd" not in self.models:
             return []
-
-        model = self.models["svd"]
         # Simplified logic: just return random top items for now to ensure API works
         # In prod, you would use model.transform() etc. like in original code
         # But we need to handle dimension mismatch between training (50 items) and production data carefully

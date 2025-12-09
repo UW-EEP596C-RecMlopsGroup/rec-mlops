@@ -4,19 +4,17 @@ Implements statistical testing with power analysis and effect size measurement
 """
 
 import asyncio
-import time
 import uuid
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import datetime
+from typing import Any, Dict, Optional, Tuple
 
 import mlflow
 import numpy as np
-import pandas as pd
 import structlog
 import yaml
 from scipy import stats
-from scipy.stats import chi2_contingency, ttest_ind
+from scipy.stats import ttest_ind
 
 logger = structlog.get_logger()
 
@@ -388,7 +386,6 @@ class ABTestFramework:
     def _simulate_experiment_data(self, experiment_id: str, duration_days: int):
         """Simulate A/B test data for demonstration purposes"""
         experiment = self.active_experiments[experiment_id]
-        config = experiment["config"]
 
         # Simulate daily user interactions
         users_per_day = max(100, experiment["required_sample_size"] // duration_days)
@@ -444,8 +441,8 @@ class ABTestFramework:
         if control_size > 10 and treatment_size > 10:
             try:
                 interim_analysis = self.analyze_experiment(experiment_id)
-            except:
-                pass
+            except Exception as exc:
+                logger.warning("Interim analysis failed", experiment_id=experiment_id, error=str(exc))
 
         status = {
             "experiment_id": experiment_id,

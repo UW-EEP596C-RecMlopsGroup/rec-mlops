@@ -3,14 +3,13 @@ Prefect Tasks for Recommendation Engine Pipeline
 Encapsulates model training logic from src.models.train_models into discrete tasks.
 """
 
-from typing import Any, Dict, Tuple
+from typing import Any, Dict
 
 import mlflow
 import numpy as np
-import pandas as pd
 import structlog
 from mlflow.tracking import MlflowClient
-from prefect import get_run_logger, task
+from prefect import task
 
 from src.models.train_models import ModelTrainer
 

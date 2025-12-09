@@ -4,7 +4,6 @@ Tests the /recommendations endpoint under concurrent load
 Performance targets: response time < 100ms (p95)
 """
 
-import json
 import random
 import time
 from datetime import datetime
@@ -141,9 +140,9 @@ def on_test_stop(environment, **kwargs):
     p95_response_time = stats.total.get_response_time_percentile(0.95)
     success_rate = (total_success / total_requests * 100) if total_requests > 0 else 0
 
-    print(f"\n{'='*60}")
+    print("\n" + "=" * 60)
     print("Performance Assessment:")
-    print(f"{'='*60}")
+    print("=" * 60)
 
     target_p95 = 100  # ms
     if p95_response_time <= target_p95:
@@ -164,10 +163,10 @@ def on_test_stop(environment, **kwargs):
         )
 
     # RPS statistics
-    print(f"\nThroughput:")
+    print("\nThroughput:")
     print(f"  Requests/sec: {stats.total.total_rps:.2f}")
 
-    print(f"{'='*60}\n")
+    print("=" * 60 + "\n")
 
 
 @events.request.add_listener

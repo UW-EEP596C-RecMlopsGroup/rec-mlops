@@ -11,7 +11,7 @@ import pytest
 # Mock Redis before importing cache
 sys.modules["redis"] = MagicMock()
 
-from src.utils.cache import CacheManager, JSON_PREFIX
+from src.utils.cache import CacheManager, JSON_PREFIX  # noqa: E402
 
 
 @pytest.fixture

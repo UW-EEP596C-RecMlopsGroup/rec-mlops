@@ -4,7 +4,7 @@ import asyncio
 import os
 import time
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional, Literal
+from typing import Any, Dict, List, Literal
 
 import structlog
 import uvicorn

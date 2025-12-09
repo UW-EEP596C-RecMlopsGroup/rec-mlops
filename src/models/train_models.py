@@ -3,10 +3,9 @@ Model Training Pipeline
 Trains SVD, NMF models with hyperparameter optimization and MLflow tracking
 """
 
-import asyncio
 import os
 import time
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Tuple
 
 import mlflow
 import mlflow.sklearn
@@ -18,7 +17,6 @@ from delta import configure_spark_with_delta_pip
 from mlflow.models import infer_signature  # <--- 新增导入
 from pyspark.sql import SparkSession
 from sklearn.decomposition import NMF, TruncatedSVD
-from sklearn.metrics import mean_squared_error
 
 logger = structlog.get_logger()
 
