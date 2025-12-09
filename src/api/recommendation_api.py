@@ -11,7 +11,7 @@ import uvicorn
 import yaml
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse, Response
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from ..models.recommendation_engine import RecommendationEngine

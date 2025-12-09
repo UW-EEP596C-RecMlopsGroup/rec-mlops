@@ -9,7 +9,7 @@ from prometheus_client import (
     CollectorRegistry,
     generate_latest,
     CONTENT_TYPE_LATEST,
-     Counter,
+    Counter,
 )
 
 # 创建独立的registry以避免重复注册问题
