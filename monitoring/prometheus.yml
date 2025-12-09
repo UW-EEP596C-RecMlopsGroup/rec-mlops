@@ -12,15 +12,10 @@ scrape_configs:
   # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
   - job_name: 'recommendation-api'
     static_configs:
-      - targets: ['localhost:8000']
+      - targets: ['spark-master:8000']
     metrics_path: '/metrics'
     scrape_interval: 5s
-    
-  - job_name: 'recommendation-api-metrics'
-    static_configs:
-      - targets: ['localhost:8001']
-    metrics_path: '/metrics'
-    scrape_interval: 10s
+    scrape_timeout: 5s
 
   - job_name: 'prometheus'
     static_configs:
@@ -29,7 +24,7 @@ scrape_configs:
   # MLflow metrics (if available)
   - job_name: 'mlflow'
     static_configs:
-      - targets: ['localhost:5000']
+      - targets: ['mlflow:5000']
     metrics_path: '/metrics'
     scrape_interval: 30s
     scrape_timeout: 10s

@@ -4,18 +4,35 @@ import asyncio
 import os
 import time
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 import structlog
 import uvicorn
 import yaml
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 from pydantic import BaseModel, Field
 
 from ..models.recommendation_engine import RecommendationEngine
 from ..utils.cache import CacheManager
+
+# 尝试导入prometheus metrics，如果不可用则忽略
+try:
+    from ..utils.prometheus_metrics import (
+        request_count,
+        response_time,
+        recommendations_total,
+        models_loaded,
+        inflight_requests,
+        recommendation_batch_size,
+        get_metrics,
+        PROMETHEUS_CONTENT_TYPE,
+    )
+    HAS_PROMETHEUS = True
+except ImportError:
+    HAS_PROMETHEUS = False
+    PROMETHEUS_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
 
 logger = structlog.get_logger()
 
@@ -127,6 +144,53 @@ async def _ensure_engine_initialized() -> RecommendationEngine:
     return recommendation_engine
 
 
+# ============================================================
+# Metrics helpers
+# ============================================================
+def _record_request_metrics(
+    *,
+    endpoint: str,
+    method: str,
+    status_code: int,
+    elapsed_seconds: float,
+    algorithm: Optional[str] = None,
+    outcome: str = "success",
+    recommendation_count: Optional[int] = None,
+):
+    """Safely record Prometheus metrics for API calls."""
+    if not HAS_PROMETHEUS:
+        return
+
+    safe_elapsed = max(elapsed_seconds, 0.0)
+    request_count.labels(
+        endpoint=endpoint,
+        method=method,
+        status=str(status_code),
+    ).inc()
+    response_time.labels(endpoint=endpoint).observe(safe_elapsed)
+
+    if algorithm:
+        recommendations_total.labels(
+            algorithm=algorithm,
+            status=outcome,
+        ).inc()
+        if recommendation_count is not None and recommendation_count > 0:
+            recommendation_batch_size.labels(algorithm=algorithm).observe(
+                recommendation_count
+            )
+
+
+@app.get("/metrics")
+def metrics_endpoint():
+    """Expose Prometheus metrics or a minimal uptime metric if unavailable."""
+    if HAS_PROMETHEUS:
+        return Response(content=get_metrics(), media_type=PROMETHEUS_CONTENT_TYPE)
+
+    uptime = _uptime_seconds()
+    body = f"rec_api_uptime_seconds {uptime:.2f}\n"
+    return PlainTextResponse(content=body)
+
+
 async def get_recommendation_engine() -> RecommendationEngine:
     return await _ensure_engine_initialized()
 
@@ -178,14 +242,71 @@ async def _build_recommendation_response(
 @app.get("/health", response_model=HealthResponse)
 async def health_check(engine: RecommendationEngine = Depends(get_recommendation_engine)):
     active_models = await engine.get_active_models()
-    return HealthResponse(status="healthy", active_models=active_models, uptime_seconds=_uptime_seconds())
+    if HAS_PROMETHEUS:
+        models_loaded.set(len(active_models))
+    return HealthResponse(
+        status="healthy",
+        active_models=active_models,
+        uptime_seconds=_uptime_seconds(),
+    )
 
 
-@app.get("/metrics")
-async def metrics_endpoint() -> PlainTextResponse:
-    uptime = _uptime_seconds()
-    body = f"rec_api_uptime_seconds {uptime:.2f}\n"
-    return PlainTextResponse(content=body)
+async def _handle_recommendation_request(
+    request: RecommendationRequest,
+    engine: RecommendationEngine,
+    *,
+    endpoint_label: str,
+    method: str,
+) -> RecommendationResponse:
+    """Execute recommendation flow with consistent metrics tracking."""
+
+    start_time = time.time()
+    inflight_label = None
+    if HAS_PROMETHEUS:
+        inflight_label = inflight_requests.labels(endpoint=endpoint_label)
+        inflight_label.inc()
+
+    try:
+        response = await _build_recommendation_response(request, engine)
+    except HTTPException as http_exc:
+        elapsed = time.time() - start_time
+        _record_request_metrics(
+            endpoint=endpoint_label,
+            method=method,
+            status_code=http_exc.status_code,
+            elapsed_seconds=elapsed,
+            algorithm=request.algorithm,
+            outcome="error",
+        )
+        raise
+    except Exception as exc:
+        elapsed = time.time() - start_time
+        _record_request_metrics(
+            endpoint=endpoint_label,
+            method=method,
+            status_code=500,
+            elapsed_seconds=elapsed,
+            algorithm=request.algorithm,
+            outcome="error",
+        )
+        raise HTTPException(status_code=500, detail="Failed to generate recommendations") from exc
+    finally:
+        if inflight_label is not None:
+            inflight_label.dec()
+
+    elapsed = time.time() - start_time
+    _record_request_metrics(
+        endpoint=endpoint_label,
+        method=method,
+        status_code=200,
+        elapsed_seconds=elapsed,
+        algorithm=request.algorithm,
+        outcome="success",
+        recommendation_count=len(response.recommendations),
+    )
+
+    response.response_time_ms = elapsed * 1000
+    return response
 
 
 @app.post("/recommendations", response_model=RecommendationResponse)
@@ -193,9 +314,12 @@ async def get_recommendations(
     request: RecommendationRequest,
     engine: RecommendationEngine = Depends(get_recommendation_engine),
 ):
-    response = await _build_recommendation_response(request, engine)
-    response.response_time_ms = 0.0
-    return response
+    return await _handle_recommendation_request(
+        request,
+        engine,
+        endpoint_label="/recommendations",
+        method="POST",
+    )
 
 
 @app.get("/users/{user_id}/recommendations", response_model=RecommendationResponse)
@@ -212,9 +336,12 @@ async def get_user_recommendations(
         algorithm=algorithm,
         exclude_seen=exclude_seen,
     )
-    response = await _build_recommendation_response(request, engine)
-    response.response_time_ms = 0.0
-    return response
+    return await _handle_recommendation_request(
+        request,
+        engine,
+        endpoint_label="/users/{user_id}/recommendations",
+        method="GET",
+    )
 
 
 @app.post("/interactions")
