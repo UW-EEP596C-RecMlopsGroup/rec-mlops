@@ -21,3 +21,25 @@ dist/
 /tmp/
 /data/raw/
 /models/artifacts/
+
+# --- 新增忽略项 ---
+
+# MLflow 产物 (防止上传大量模型文件)
+mlflow_artifacts/
+mlruns/
+
+# Spark 本地运行时生成的文件
+spark-warehouse/
+metastore_db/
+derby.log
+
+# Jupyter Notebook 检查点
+.ipynb_checkpoints
+
+# 常见的模型文件 (如果它们出现在非指定目录)
+*.pkl
+*.joblib
+*.model
+
+# 排除 Mac 系统可能生成的其他垃圾文件
+._*
