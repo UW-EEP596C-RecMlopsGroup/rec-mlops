@@ -4,8 +4,7 @@ Testing caching functionality and performance
 """
 
 import sys
-import time
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -15,142 +14,89 @@ sys.modules["redis"] = MagicMock()
 from src.utils.cache import CacheManager
 
 
+@pytest.fixture
+def cache_builder():
+    """Helper to create cache managers with injected Redis clients."""
+
+    def _build(**options):
+        mock_client = MagicMock()
+        manager = CacheManager({"host": "localhost", "port": 6379, "db": 0}, client=mock_client, **options)
+        return manager, mock_client
+
+    return _build
+
+
 class TestCacheManager:
     """Test cases for CacheManager"""
 
-    @pytest.fixture
-    def cache_manager(self):
-        """Create a cache manager instance"""
-        with patch("redis.Redis"):
-            return CacheManager({"host": "localhost", "port": 6379, "db": 0})
+    def test_cache_initialization(self, cache_builder):
+        cache, _ = cache_builder()
+        assert cache is not None
+        assert cache.ttl > 0
 
-    def test_cache_initialization(self, cache_manager):
-        """Test cache manager initialization"""
-        assert cache_manager is not None
-        assert cache_manager.ttl > 0
+    def test_cache_set_and_get(self, cache_builder):
+        cache, mock_client = cache_builder()
+        mock_client.get.return_value = b'{"items": [1, 2, 3]}'
 
-    @patch("redis.Redis")
-    def test_cache_set_and_get(self, mock_redis):
-        """Test setting and getting cache values"""
-        mock_redis_instance = MagicMock()
-        mock_redis.return_value = mock_redis_instance
-        mock_redis_instance.get.return_value = b'{"items": [1, 2, 3]}'
+        cache.set("user_123", {"items": [1, 2, 3]})
+        result = cache.get("user_123")
 
-        with patch("redis.Redis", return_value=mock_redis_instance):
-            cache = CacheManager(host="localhost")
-            cache.set("user_123", {"items": [1, 2, 3]})
-            result = cache.get("user_123")
+        assert mock_client.setex.called
+        mock_client.get.assert_called_with("user_123")
+        assert result == {"items": [1, 2, 3]}
 
-            # Verify set was called
-            assert mock_redis_instance.setex.called
+    def test_cache_expiration(self, cache_builder):
+        cache, mock_client = cache_builder(ttl=1)
+        cache.set("temp_key", {"data": "value"})
 
-    @patch("redis.Redis")
-    def test_cache_expiration(self, mock_redis):
-        """Test that cache values expire after TTL"""
-        mock_redis_instance = MagicMock()
-        mock_redis.return_value = mock_redis_instance
-        mock_redis_instance.get.return_value = None  # Simulates expired key
+        assert mock_client.setex.called
+        call_args = mock_client.setex.call_args
+        assert call_args[0][1] == 1
 
-        with patch("redis.Redis", return_value=mock_redis_instance):
-            cache = CacheManager(host="localhost", ttl=1)
-            cache.set("temp_key", {"data": "value"})
+    def test_cache_delete(self, cache_builder):
+        cache, mock_client = cache_builder()
+        cache.delete("user_123")
 
-            # Verify TTL was set
-            assert mock_redis_instance.setex.called
-            call_args = mock_redis_instance.setex.call_args
-            assert call_args[0][1] == 1  # TTL should be 1 second
+        mock_client.delete.assert_called_with("user_123")
 
-    @patch("redis.Redis")
-    def test_cache_delete(self, mock_redis):
-        """Test deleting cache entries"""
-        mock_redis_instance = MagicMock()
-        mock_redis.return_value = mock_redis_instance
+    def test_cache_clear_all(self, cache_builder):
+        cache, mock_client = cache_builder()
+        mock_client.keys.return_value = [b"key1", b"key2", b"key3"]
 
-        with patch("redis.Redis", return_value=mock_redis_instance):
-            cache = CacheManager(host="localhost")
-            cache.delete("user_123")
+        cache.clear()
 
-            assert mock_redis_instance.delete.called
+        assert mock_client.delete.called or mock_client.flushdb.called
 
-    @patch("redis.Redis")
-    def test_cache_clear_all(self, mock_redis):
-        """Test clearing all cache entries"""
-        mock_redis_instance = MagicMock()
-        mock_redis.return_value = mock_redis_instance
-        mock_redis_instance.keys.return_value = [b"key1", b"key2", b"key3"]
+    def test_cache_key_generation(self, cache_builder):
+        cache, _ = cache_builder()
+        key1 = cache._generate_key("user", 123)
+        key2 = cache._generate_key("user", 456)
 
-        with patch("redis.Redis", return_value=mock_redis_instance):
-            cache = CacheManager(host="localhost")
-            cache.clear()
-
-            # Verify delete operations
-            assert mock_redis_instance.delete.called or mock_redis_instance.flushdb.called
-
-    @patch("redis.Redis")
-    def test_cache_key_generation(self, mock_redis):
-        """Test cache key generation"""
-        mock_redis_instance = MagicMock()
-        mock_redis.return_value = mock_redis_instance
-
-        with patch("redis.Redis", return_value=mock_redis_instance):
-            cache = CacheManager(host="localhost")
-
-            # Test key generation with different inputs
-            key1 = cache._generate_key("user", 123)
-            key2 = cache._generate_key("user", 456)
-
-            # Keys should be different
-            assert key1 != key2
-            # Keys should be deterministic
-            assert key1 == cache._generate_key("user", 123)
+        assert key1 != key2
+        assert key1 == cache._generate_key("user", 123)
 
 
 class TestCacheEdgeCases:
     """Test edge cases and error conditions"""
 
-    @patch("redis.Redis")
-    def test_cache_with_none_value(self, mock_redis):
-        """Test caching None values"""
-        mock_redis_instance = MagicMock()
-        mock_redis.return_value = mock_redis_instance
+    def test_cache_with_none_value(self, cache_builder):
+        cache, mock_client = cache_builder()
+        cache.set("none_key", None)
 
-        with patch("redis.Redis", return_value=mock_redis_instance):
-            cache = CacheManager(host="localhost")
-            cache.set("none_key", None)
+        assert mock_client.setex.called
 
-            # Verify set was called
-            assert mock_redis_instance.setex.called
+    def test_cache_with_large_value(self, cache_builder):
+        cache, mock_client = cache_builder()
+        large_data = {"data": "x" * (1024 * 1024)}
+        cache.set("large_key", large_data)
 
-    @patch("redis.Redis")
-    def test_cache_with_large_value(self, mock_redis):
-        """Test caching large values"""
-        mock_redis_instance = MagicMock()
-        mock_redis.return_value = mock_redis_instance
+        assert mock_client.setex.called
 
-        with patch("redis.Redis", return_value=mock_redis_instance):
-            cache = CacheManager(host="localhost")
+    def test_cache_connection_failure_handling(self, cache_builder):
+        cache, mock_client = cache_builder()
+        mock_client.get.side_effect = Exception("Connection failed")
 
-            # Create large value (1MB)
-            large_data = {"data": "x" * (1024 * 1024)}
-            cache.set("large_key", large_data)
+        with pytest.raises(Exception):
+            cache.get("key")
 
-            # Verify set was called
-            assert mock_redis_instance.setex.called
-
-    @patch("redis.Redis")
-    def test_cache_connection_failure_handling(self, mock_redis):
-        """Test graceful handling of connection failures"""
-        mock_redis_instance = MagicMock()
-        mock_redis_instance.get.side_effect = Exception("Connection failed")
-        mock_redis.return_value = mock_redis_instance
-
-        with patch("redis.Redis", return_value=mock_redis_instance):
-            cache = CacheManager(host="localhost")
-
-            # Should handle connection errors gracefully
-            try:
-                cache.get("key")
-            except Exception:
-                pass  # Expected to fail
-
-            assert mock_redis_instance.get.called
+        assert mock_client.get.called
