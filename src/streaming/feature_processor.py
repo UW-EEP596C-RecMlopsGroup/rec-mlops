@@ -4,7 +4,7 @@ Processes user interactions and updates features with 67% dimensionality reducti
 """
 
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import numpy as np
 import structlog
@@ -16,6 +16,7 @@ from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
 logger = structlog.get_logger()
+
 
 def get_delta_table():
     from delta.tables import DeltaTable

@@ -101,7 +101,7 @@ def on_test_start(environment, **kwargs):
     print(f"Load test started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
     print(f"Target URL: {environment.host}")
-    print(f"Target response time: < 100ms (p95)")
+    print("Target response time: < 100ms (p95)")
     print("=" * 60 + "\n")
 
 
@@ -124,14 +124,14 @@ def on_test_stop(environment, **kwargs):
     print(f"Failed: {total_failures} ({total_failures/total_requests*100:.1f}%)")
 
     # Response time statistics
-    print(f"\nResponse Time Statistics (ms):")
+    print("\nResponse Time Statistics (ms):")
     print(f"  Min: {stats.total.min_response_time:.2f}")
     print(f"  Max: {stats.total.max_response_time:.2f}")
     print(f"  Mean: {stats.total.avg_response_time:.2f}")
     print(f"  Median: {stats.total.median_response_time:.2f}")
 
     # Percentile response times
-    print(f"\nPercentile Response Times (ms):")
+    print("\nPercentile Response Times (ms):")
     for percentile in [50, 75, 90, 95, 99]:
         resp_time = stats.total.get_response_time_percentile(percentile / 100)
         print(f"  p{percentile}: {resp_time:.2f}")

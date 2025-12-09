@@ -5,7 +5,7 @@ Trains SVD, NMF models with hyperparameter optimization and MLflow tracking
 
 import os
 import time
-from typing import Any, Dict, Tuple
+from typing import Dict, Tuple
 
 import mlflow
 import mlflow.sklearn
