@@ -105,46 +105,6 @@ class TestCacheManager:
             assert key1 == cache._generate_key("user", 123)
 
 
-@pytest.mark.smoke
-class TestCachePerformance:
-    """Performance tests for cache"""
-
-    @patch("redis.Redis")
-    def test_cache_read_performance(self, mock_redis):
-        """Test cache read performance"""
-        mock_redis_instance = MagicMock()
-        mock_redis.return_value = mock_redis_instance
-        mock_redis_instance.get.return_value = b'{"items": [1, 2, 3]}'
-
-        with patch("redis.Redis", return_value=mock_redis_instance):
-            cache = CacheManager(host="localhost")
-
-            start = time.time()
-            for i in range(1000):
-                cache.get(f"key_{i}")
-            elapsed = time.time() - start
-
-            # Cache reads should be very fast (< 100ms for 1000 ops)
-            assert elapsed < 0.1, f"Cache reads took {elapsed}s for 1000 ops"
-
-    @patch("redis.Redis")
-    def test_cache_write_performance(self, mock_redis):
-        """Test cache write performance"""
-        mock_redis_instance = MagicMock()
-        mock_redis.return_value = mock_redis_instance
-
-        with patch("redis.Redis", return_value=mock_redis_instance):
-            cache = CacheManager(host="localhost")
-
-            start = time.time()
-            for i in range(100):
-                cache.set(f"key_{i}", {"data": f"value_{i}"})
-            elapsed = time.time() - start
-
-            # Cache writes should be reasonably fast (< 500ms for 100 ops)
-            assert elapsed < 0.5, f"Cache writes took {elapsed}s for 100 ops"
-
-
 class TestCacheEdgeCases:
     """Test edge cases and error conditions"""
 

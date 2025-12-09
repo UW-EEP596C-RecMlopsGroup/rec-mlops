@@ -1,5 +1,6 @@
 """Real-Time Recommendation API with caching helpers for unit tests."""
 
+import asyncio
 import os
 import time
 from contextlib import asynccontextmanager
@@ -72,6 +73,7 @@ class InteractionRequest(BaseModel):
 
 # Global state
 recommendation_engine = None
+_engine_lock = asyncio.Lock()
 cache_settings = config.get("database", {}).get("redis", {}).copy()
 cache_settings.setdefault("ttl", config.get("api", {}).get("cache_ttl", 300))
 cache_manager = CacheManager(cache_settings)
@@ -80,20 +82,9 @@ cache_manager = CacheManager(cache_settings)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan management"""
-    global recommendation_engine
 
     logger.info("Starting Recommendation API...")
-
-    # Initialize Engine
-    recommendation_engine = RecommendationEngine(config)
-
-    # Initial Model Load
-    try:
-        await recommendation_engine.load_models()
-        logger.info("Models loaded successfully")
-    except Exception as e:
-        logger.error(f"Error loading models during startup: {e}")
-        # Continue startup even if model load fails (allow for retry later)
+    await _ensure_engine_initialized()
 
     yield
 
@@ -111,10 +102,33 @@ app.add_middleware(
 )
 
 
-async def get_recommendation_engine() -> RecommendationEngine:
-    if recommendation_engine is None:
-        raise HTTPException(status_code=503, detail="Engine not initialized")
+async def _ensure_engine_initialized() -> RecommendationEngine:
+    """Lazily initialize the recommendation engine for environments without startup hooks."""
+
+    global recommendation_engine
+
+    if recommendation_engine is not None:
+        return recommendation_engine
+
+    async with _engine_lock:
+        if recommendation_engine is None:
+            try:
+                recommendation_engine = RecommendationEngine(config)
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.error("Failed to construct recommendation engine", exc_info=True)
+                raise HTTPException(status_code=503, detail="Engine initialization failed") from exc
+
+            try:
+                await recommendation_engine.load_models()
+                logger.info("Models loaded successfully")
+            except Exception as exc:  # pragma: no cover - best-effort logging
+                logger.error(f"Error loading models during startup: {exc}")
+
     return recommendation_engine
+
+
+async def get_recommendation_engine() -> RecommendationEngine:
+    return await _ensure_engine_initialized()
 
 
 def _cache_key(user_id: int, algorithm: str, num_recs: int, exclude_seen: bool) -> str:

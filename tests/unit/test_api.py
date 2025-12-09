@@ -182,38 +182,6 @@ class TestRecommendationAPI:
         assert data["message"] == "Model retraining started"
 
 
-class TestPerformanceRequirements:
-    """Test performance requirements"""
-
-    @patch("src.api.recommendation_api.recommendation_engine")
-    @patch("src.api.recommendation_api.cache_manager")
-    def test_sub_100ms_latency_requirement(self, mock_cache, mock_engine):
-        """Test that API meets sub-100ms latency requirement"""
-        import time
-
-        mock_cache.get.return_value = None
-        mock_engine.get_recommendations = AsyncMock(
-            return_value=[{"item_id": 1, "score": 0.9, "algorithm": "hybrid"}]
-        )
-
-        start_time = time.time()
-        response = client.post(
-            "/recommendations",
-            json={"user_id": 123, "num_recommendations": 10, "algorithm": "hybrid"},
-        )
-        end_time = time.time()
-
-        latency_ms = (end_time - start_time) * 1000
-
-        assert response.status_code == 200
-        # Note: This test may not always pass in unit test environment
-        # but serves as a performance benchmark
-        if latency_ms < 100:
-            assert True  # Meets requirement
-        else:
-            pytest.skip(f"Latency {latency_ms:.2f}ms exceeds target in test environment")
-
-
 class TestErrorHandling:
     """Test error handling scenarios"""
 

@@ -1,6 +1,7 @@
 """Caching utilities used by the recommendation API and engines."""
 
 import hashlib
+import importlib
 import json
 import pickle
 import threading
@@ -59,7 +60,13 @@ class _InMemoryBackend:
 class CacheManager:
     """Synchronous cache wrapper with Redis and in-memory backends."""
 
-    def __init__(self, redis_config: Optional[Dict[str, Any]] = None, **kwargs: Any):
+    def __init__(
+        self,
+        redis_config: Optional[Dict[str, Any]] = None,
+        *,
+        client: Optional[Any] = None,
+        **kwargs: Any,
+    ):
         config = dict(redis_config or {})
         config.update(kwargs)
 
@@ -70,15 +77,29 @@ class CacheManager:
         self.ttl = config.get("ttl", 300)
         self.namespace = config.get("namespace", "rec")
 
-        self.client = self._create_client()
+        self.client = client or self._create_client()
         self._fallback = _InMemoryBackend()
 
+    def _get_redis_module(self):
+        """Load redis module lazily so tests can inject mocks."""
+
+        global redis
+        if redis is not None:
+            return redis
+        try:
+            redis = importlib.import_module("redis")
+            return redis
+        except Exception as exc:  # pragma: no cover - optional dependency
+            logger.warning("Redis module unavailable, using in-memory cache: %s", exc)
+            return None
+
     def _create_client(self):
-        if redis is None:
+        redis_module = self._get_redis_module()
+        if not redis_module:
             return None
 
         try:
-            return redis.Redis(host=self.host, port=self.port, db=self.db, password=self.password)
+            return redis_module.Redis(host=self.host, port=self.port, db=self.db, password=self.password)
         except Exception as exc:  # pragma: no cover
             logger.warning("Falling back to in-memory cache: %s", exc)
             return None
