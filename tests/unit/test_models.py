@@ -279,4 +279,3 @@ class TestRecommendationEngine:
 
         # Should still return recommendations (using average user profile)
         assert len(recommendations) > 0
-    
