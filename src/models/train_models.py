@@ -14,7 +14,7 @@ import pandas as pd
 import structlog
 import yaml
 from delta import configure_spark_with_delta_pip
-from mlflow.models import infer_signature  # <--- 新增导入
+from mlflow.models import infer_signature  # <--- Added import
 from pyspark.sql import SparkSession
 from sklearn.decomposition import NMF, TruncatedSVD
 
@@ -69,7 +69,7 @@ class ModelTrainer:
             interactions_df = self.spark.read.format("delta").load(table_path)
             interactions_pd = interactions_df.toPandas()
 
-            # 去重逻辑
+            # Deduplicate records
             interactions_pd = interactions_pd.drop_duplicates(
                 subset=["user_id", "item_id"], keep="last"
             )
@@ -114,19 +114,19 @@ class ModelTrainer:
         logger.info("Training SVD model...")
         with mlflow.start_run(run_name="svd_training") as run:
             svd = TruncatedSVD(n_components=10, random_state=42)
-            transformed_data = svd.fit_transform(user_item_matrix)  # 这里的输出用于生成签名
+            transformed_data = svd.fit_transform(user_item_matrix)  # Output used to build the signature
 
             metrics = {"rmse": 0.85, "r2_score": 0.88}
             mlflow.log_metrics(metrics)
 
-            # --- 新增：生成签名 ---
+            # --- Added: generate the signature ---
             signature = infer_signature(user_item_matrix, transformed_data)
 
             mlflow.sklearn.log_model(
                 svd,
                 "svd_model",
                 signature=signature,
-                input_example=user_item_matrix[:1],  # 提供一个输入样本
+                input_example=user_item_matrix[:1],  # Provide a sample input
             )
 
             return {
@@ -146,7 +146,7 @@ class ModelTrainer:
             metrics = {"rmse": 0.87, "coverage": 0.92}
             mlflow.log_metrics(metrics)
 
-            # --- 新增：生成签名 ---
+            # --- Added: generate the signature ---
             signature = infer_signature(user_item_matrix, W)
 
             mlflow.sklearn.log_model(

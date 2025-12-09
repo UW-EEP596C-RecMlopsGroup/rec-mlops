@@ -13,7 +13,7 @@ from prefect import task
 
 from src.models.train_models import ModelTrainer
 
-# 初始化 structlog，保持与原项目一致的日志风格
+# Initialize structlog so logs match the original project style
 logger = structlog.get_logger()
 
 
@@ -24,12 +24,12 @@ def task_load_data(config_path: str = "config/config.yaml") -> np.ndarray:
     Uses Spark via ModelTrainer to handle data loading.
     """
     logger.info("Initializing ModelTrainer for data loading...")
-    # 初始化 Trainer 以复用其数据加载逻辑 (Spark Session 等)
+    # Initialize the trainer so we can reuse its data-loading logic (Spark session, etc.)
     trainer = ModelTrainer(config_path=config_path)
 
     logger.info("Loading training data...")
-    # load_training_data 返回 (interactions_pd, user_item_matrix.values)
-    # 我们这里主要需要矩阵用于训练
+    # load_training_data returns (interactions_pd, user_item_matrix.values)
+    # Here we mainly need the matrix for model training
     _, user_item_matrix = trainer.load_training_data()
 
     row_count, col_count = user_item_matrix.shape
@@ -50,7 +50,7 @@ def task_train_svd(
     trainer = ModelTrainer(config_path=config_path)
 
     try:
-        # train_models.py 现在返回的是一个字典:
+        # train_models.py now returns a dictionary:
         # {'status': 'success', 'metrics': {...}, 'run_id': '...', 'model_type': 'svd'}
         result = trainer.train_svd_model(user_item_matrix)
 
@@ -76,7 +76,7 @@ def task_train_nmf(
     trainer = ModelTrainer(config_path=config_path)
 
     try:
-        # train_models.py 现在返回的是一个字典
+        # train_models.py now returns a dictionary
         result = trainer.train_nmf_model(user_item_matrix)
 
         rmse = result.get("metrics", {}).get("rmse", "N/A")
@@ -106,7 +106,7 @@ def task_evaluate_results(svd_result: Dict[str, Any], nmf_result: Dict[str, Any]
     if not results:
         raise ValueError("All model training tasks failed.")
 
-    # 简单的比较逻辑：优先比较 RMSE
+    # Simple comparison strategy: prioritize RMSE
     best_model = None
     best_rmse = float("inf")
 
@@ -129,18 +129,18 @@ def task_register_and_promote(
     """
     Register the best model and promote to Production if it beats the current one.
     """
-    # 定义注册表中的模型名称 (标准化命名)
+    # Define the standardized model name inside the registry
     reg_model_name = f"Recommendation_{best_model_name.upper()}"
     logger.info(f"🚀 Registering model: {reg_model_name} from run {run_id}")
 
     client = MlflowClient()
 
-    # 1. 注册模型版本
-    # model_uri 格式通常为: runs:/<run_id>/<artifact_path>
+    # 1. Register the model version
+    # model_uri typically looks like runs:/<run_id>/<artifact_path>
     model_version = mlflow.register_model(model_uri, reg_model_name)
     logger.info(f"Registered version: {model_version.version}")
 
-    # 2. 获取当前 Production 模型的指标 (如果有)
+    # 2. Fetch the current Production metrics (if any)
     promote_to_prod = False
     try:
         latest_prod = client.get_latest_versions(reg_model_name, stages=["Production"])
@@ -169,7 +169,7 @@ def task_register_and_promote(
         logger.warning(f"Error comparing models: {e}. Defaulting to promotion.")
         promote_to_prod = True
 
-    # 3. 执行晋升
+    # 3. Perform the promotion
     if promote_to_prod:
         client.transition_model_version_stage(
             name=reg_model_name,

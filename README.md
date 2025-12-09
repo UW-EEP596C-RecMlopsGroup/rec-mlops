@@ -1,27 +1,27 @@
-# 项目快速启动指南
+# Quick Start Guide
 
-以下命令请**严格按顺序逐条复制执行**（已测试可直接运行）。
+Run the following commands **exactly in order** (each step has been verified).
 
-## 操作步骤
+## Steps
 
-1. **启动所有服务**
+1. **Start every service**
 
     ```bash
-    # 1. 启动所有服务
+    # 1. Start every service
     docker-compose up -d
     ```
 
-2. **获取 spark-master 容器 ID**
+2. **Fetch the spark-master container ID**
 
     ```bash
-    # 2. 获取 spark-master 容器 ID
+    # 2. Fetch the spark-master container ID
     CONTAINER=$(docker-compose ps -q spark-master)
     ```
 
-3. **在容器内安装基础依赖**
+3. **Install the base dependencies inside the container**
 
     ```bash
-    # 3. 在容器内安装基础依赖
+    # 3. Install the base dependencies inside the container
     docker exec -it $CONTAINER pip install \
         prefect \
         mlflow \
@@ -33,24 +33,24 @@
         kafka-python==2.0.2
     ```
 
-4. **安装 Prefect 2.x 版本（必须 <3.0）**
+4. **Install Prefect 2.x (<3.0 is required)**
 
     ```bash
-    # 4. 安装 Prefect 2.x 版本（必须 <3.0）
+    # 4. Install Prefect 2.x (<3.0 is required)
     docker exec -it $CONTAINER pip install "prefect>=2.0.0,<3.0.0"
     ```
 
-5. **初始化 Delta Lake 表结构**
+5. **Initialize the Delta Lake tables**
 
     ```bash
-    # 5. 初始化 Delta Lake 表结构（在 MinIO 中创建所需表）
+    # 5. Initialize the Delta Lake tables (create the required tables in MinIO)
     docker exec -w /app -it $CONTAINER python src/init_delta_tables.py
     ```
 
-6. **运行模型重训练 Flow（关键步骤）**
+6. **Run the model retraining flow (critical step)**
 
     ```bash
-    # 6. 运行模型重训练 Flow（关键步骤）
+    # 6. Run the model retraining flow (critical step)
     docker exec \
       -e PREFECT_HOME=/tmp/.prefect \
       -e MLFLOW_TRACKING_URI=http://mlflow:5000 \
@@ -59,20 +59,20 @@
       -it $CONTAINER python -m src.pipelines.retraining_flow
     ```
 
-## 预期结果
+## Expected Results
 
-- Prefect UI（http://localhost:4200）显示 Flow 运行成功（绿色）
-- MLflow UI（http://localhost:5000） → Models 页面出现注册模型：Recommendation_SVD，最新版本被标记为 Production
+- Prefect UI (http://localhost:4200) shows the flow run in green (success)
+- MLflow UI (http://localhost:5000) -> Models page lists `Recommendation_SVD` with the latest version promoted to `Production`
 
-## 模型热加载验证
+## Model Hot-Reload Validation
 
 ```bash
-# 7. 测试模型热加载 API（验证 Production 模型是否成功加载到推荐服务）
+# 7. Exercise the model hot-reload API (confirm the Production model is loaded by the service)
 docker exec -w /app -it $CONTAINER python -c \
   "import requests; print(requests.post('http://localhost:8000/admin/reload-models').json())"
 ```
 
-预期返回（示例）：
+Expected response (example):
 
 ```json
 {
@@ -88,60 +88,60 @@ docker exec -w /app -it $CONTAINER python -c \
 }
 ```
 
-## 开发和贡献
+## Development & Contributions
 
-### Phase 3: 质量保障与自动化测试
+### Phase 3: Quality Assurance & Automation
 
-**一键安装开发工具：**
+**Install all dev tooling:**
 
 ```bash
 make install-dev
 ```
 
-自动创建虚拟环境、安装所有工具、配置 Git 钩子。
+Automatically creates a virtualenv, installs every tool, and configures the Git hooks.
 
-**激活虚拟环境：**
+**Activate the virtual environment:**
 
 ```bash
 source venv_py313/bin/activate
 ```
 
-**代码质量检查（推荐用于日常开发）：**
+**Code quality checks (for daily work):**
 
 ```bash
-make ci              # lint + type-check 代码质量检查
-make format          # 自动格式化代码 (Black + isort)
-make lint            # Flake8 + Bandit 检查
-make type-check      # MyPy 类型检查
-make pre-commit      # 所有预提交钩子
+make ci              # lint + type-check
+make format          # format code with Black + isort
+make lint            # run Flake8 + Bandit
+make type-check      # run MyPy
+make pre-commit      # execute every pre-commit hook
 ```
 
-**负载测试：**
+**Load testing:**
 
 ```bash
-make load-test              # 启动 Locust UI (http://localhost:8089)
-make load-test-headless     # 无界面测试 (5min, 100 users)
+make load-test              # start the Locust UI (http://localhost:8089)
+make load-test-headless     # headless run (5 min, 100 users)
 ```
 
-**单元测试（需要完整依赖环境）：**
+**Unit tests (requires the full dependency stack):**
 
 ```bash
-make ci-test         # 完整 CI + 单元测试
-make test            # 仅单元测试
-make test-smoke      # 冒烟测试
+make ci-test         # CI workflow + unit tests
+make test            # unit tests only
+make test-smoke      # smoke tests
 ```
 
-### Phase 3 工具
+### Phase 3 Tooling
 
-| 工具 | 用途 | 配置文件 |
-|------|------|--------|
-| Black | 代码格式化 | pyproject.toml |
-| isort | 导入排序 | pyproject.toml |
-| Flake8 | 代码检查 | .flake8 |
-| MyPy | 类型检查 | pyproject.toml |
-| Bandit | 安全检查 | pyproject.toml |
-| pytest | 单元测试 | pyproject.toml |
-| pre-commit | Git 钩子 | .pre-commit-config.yaml |
-| Locust | 负载测试 | tests/locustfile.py |
+| Tool | Purpose | Config File |
+|------|---------|-------------|
+| Black | Code formatting | pyproject.toml |
+| isort | Import sorting | pyproject.toml |
+| Flake8 | Code linting | .flake8 |
+| MyPy | Static type checking | pyproject.toml |
+| Bandit | Security scanning | pyproject.toml |
+| pytest | Unit testing | pyproject.toml |
+| pre-commit | Git hooks | .pre-commit-config.yaml |
+| Locust | Load testing | tests/locustfile.py |
 
 

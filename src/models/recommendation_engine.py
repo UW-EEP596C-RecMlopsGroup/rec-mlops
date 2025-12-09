@@ -10,7 +10,7 @@ import mlflow
 import numpy as np
 import pandas as pd
 import structlog
-from delta import configure_spark_with_delta_pip  # <--- 关键修改：导入配置工具
+from delta import configure_spark_with_delta_pip  # <--- Key fix: import the configuration helper
 from pyspark.sql import SparkSession
 from sklearn.decomposition import NMF, TruncatedSVD
 from sklearn.preprocessing import MinMaxScaler
@@ -41,7 +41,7 @@ class RecommendationEngine:
         self.kafka_producer = None
 
         # ---------------------------------------------------------
-        # 核心修复：配置 Spark 以支持 Delta Lake (容器兼容版)
+        # Core fix: configure Spark so the container can use Delta Lake
         # ---------------------------------------------------------
         builder = (
             SparkSession.builder.appName(config["streaming"]["spark"]["app_name"])
@@ -50,9 +50,9 @@ class RecommendationEngine:
                 "spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog"
             )
             .config("spark.jars.ivy", "/tmp/.ivy2")
-        )  # <--- 关键修复：指定可写缓存目录
+        )  # <--- Key fix: point Ivy to a writable cache directory
 
-        # 自动配置 JAR 包依赖
+        # Automatically configure the JAR dependencies
         self.spark = configure_spark_with_delta_pip(builder).getOrCreate()
         # ---------------------------------------------------------
 

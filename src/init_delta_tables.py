@@ -1,4 +1,4 @@
-# 文件位置: src/init_delta_tables.py
+# Location: src/init_delta_tables.py
 import os
 import time
 
@@ -10,7 +10,7 @@ from pyspark.sql.types import DoubleType, LongType, StringType, StructField, Str
 def init_delta_tables():
     print("🚀 Starting Delta Lake initialization inside Docker...")
 
-    # 1. 配置 Spark + Delta
+    # 1. Configure Spark + Delta
     builder = (
         SparkSession.builder.appName("DeltaSetup")
         .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
@@ -21,12 +21,12 @@ def init_delta_tables():
 
     spark = configure_spark_with_delta_pip(builder).getOrCreate()
 
-    # 注意：这里我们使用 /tmp/delta-tables，与 setup.py 保持一致
-    # 但建议生产环境改为 /data/delta-tables 以便持久化
+    # Note: use /tmp/delta-tables here to match setup.py
+    # For production, switch to /data/delta-tables for persistence
     delta_path = "/tmp/delta-tables"
     os.makedirs(delta_path, exist_ok=True)
 
-    # 2. 创建 Interactions 表
+    # 2. Create the interactions table
     print("📦 Creating interactions table...")
     interactions_schema = StructType(
         [
@@ -39,7 +39,7 @@ def init_delta_tables():
         ]
     )
 
-    # 生成一些样本数据
+    # Generate sample rows
     sample_data = []
     for i in range(1000):
         sample_data.append(
@@ -55,11 +55,11 @@ def init_delta_tables():
 
     df = spark.createDataFrame(sample_data, interactions_schema)
 
-    # 写入 Delta Lake
+    # Write to Delta Lake
     df.write.format("delta").mode("overwrite").save(f"{delta_path}/interactions")
     print(f"✅ Interactions table created at {delta_path}/interactions")
 
-    # 3. 创建 User Profiles 表
+    # 3. Create the user_profiles table
     print("👤 Creating user_profiles table...")
     user_schema = StructType(
         [
@@ -70,7 +70,7 @@ def init_delta_tables():
         ]
     )
 
-    # 创建空表或样本数据
+    # Create an empty table or seed it with sample data
     user_data = [(1, 4.5, 10, float(time.time()))]
     user_df = spark.createDataFrame(user_data, user_schema)
 

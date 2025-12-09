@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from ..models.recommendation_engine import RecommendationEngine
 from ..utils.cache import CacheManager
 
-# 尝试导入prometheus metrics，如果不可用则忽略
+# Attempt to import Prometheus metrics; fall back gracefully if unavailable
 try:
     from ..utils.prometheus_metrics import (
         request_count,
@@ -375,7 +375,7 @@ async def trigger_model_retrain(engine: RecommendationEngine = Depends(get_recom
     return {"status": "success", "message": "Model retraining started"}
 
 
-# --- 新增：Admin Endpoint 实现热加载 ---
+# --- Added: admin endpoint to support hot reload ---
 @app.post("/admin/reload-models")
 async def reload_models(
     background_tasks: BackgroundTasks,

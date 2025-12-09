@@ -1,6 +1,6 @@
 """
-Prometheus metrics for recommendation API
-轻量级metrics导出，避免重复注册
+Prometheus metrics for the recommendation API.
+Lightweight exports to prevent duplicate registration.
 """
 
 from prometheus_client import (
@@ -12,10 +12,10 @@ from prometheus_client import (
     Counter,
 )
 
-# 创建独立的registry以避免重复注册问题
+# Use an isolated registry to prevent duplicate registration
 _registry = CollectorRegistry()
 
-# 请求计数器
+# Request counter
 request_count = Counter(
     'recommendation_api_requests_total',
     'Total API requests',
@@ -23,7 +23,7 @@ request_count = Counter(
     registry=_registry
 )
 
-# 响应时间
+# Response time
 response_time = Histogram(
     'recommendation_api_response_time_seconds',
     'Response time in seconds',
@@ -32,7 +32,7 @@ response_time = Histogram(
     registry=_registry
 )
 
-# 推荐生成
+# Recommendation generation tracker
 recommendations_total = Counter(
     'recommendation_api_recommendations_total',
     'Total recommendations generated',
@@ -40,7 +40,7 @@ recommendations_total = Counter(
     registry=_registry
 )
 
-# 并发请求
+# Concurrent requests
 inflight_requests = Gauge(
     'recommendation_api_inflight_requests',
     'Concurrent in-flight requests',
@@ -48,7 +48,7 @@ inflight_requests = Gauge(
     registry=_registry
 )
 
-# 推荐数量分布
+# Distribution of recommendation counts
 recommendation_batch_size = Histogram(
     'recommendation_api_recommendation_count',
     'Number of recommendations returned per request',
@@ -57,14 +57,14 @@ recommendation_batch_size = Histogram(
     registry=_registry
 )
 
-# 模型加载状态
+# Model load status
 models_loaded = Gauge(
     'recommendation_api_models_loaded',
     'Number of loaded models',
     registry=_registry
 )
 
-# 缓存命中率
+# Cache hit ratio
 cache_hits = Counter(
     'recommendation_api_cache_hits_total',
     'Cache hits',
@@ -82,5 +82,5 @@ PROMETHEUS_CONTENT_TYPE = CONTENT_TYPE_LATEST
 
 
 def get_metrics() -> bytes:
-    """返回Prometheus格式的metrics"""
+    """Return metrics formatted for Prometheus."""
     return generate_latest(_registry)

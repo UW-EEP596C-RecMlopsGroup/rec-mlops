@@ -1,8 +1,8 @@
 name: CI/CD Pipeline
 
-# 触发条件：
-# - 当有 Pull Request 推送到 main 分支时，运行 CI 流程
-# - 当代码合并到 main 分支时，运行 CI + CD 流程
+# Trigger conditions:
+# - Run the CI pipeline when a pull request targets main
+# - Run the full CI + CD pipeline when code is merged into main
 on:
   pull_request:
     branches: [main]
@@ -54,11 +54,11 @@ jobs:
           file: docker/Dockerfile.api
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/rec-mlops:latest
-      # 可选：触发 Prefect Flow
+      # Optional: trigger a Prefect Flow run
       # - name: Trigger Prefect Flow
       #   run: |
       #     curl -X POST <PREFECT_API_ENDPOINT> -H "Authorization: Bearer ${{ secrets.PREFECT_TOKEN }}"
-      # 自动更新 k8s 部署文件（需自定义脚本）
+      # Automatically update the k8s deployment (requires a custom script)
       # - name: Update k8s deployment
       #   run: |
       #     python scripts/update_k8s_deployment.py --image ${{ secrets.DOCKERHUB_USERNAME }}/rec-mlops:latest
