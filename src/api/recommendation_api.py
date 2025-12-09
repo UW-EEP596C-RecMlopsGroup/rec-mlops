@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Literal
 import structlog
 import uvicorn
 import yaml
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
@@ -187,9 +187,9 @@ async def get_recommendations(
 @app.get("/users/{user_id}/recommendations", response_model=RecommendationResponse)
 async def get_user_recommendations(
     user_id: int,
-    num_recommendations: int = Field(default=10, ge=1, le=50),
-    algorithm: AlgorithmLiteral = "hybrid",
-    exclude_seen: bool = True,
+    num_recommendations: int = Query(10, ge=1, le=50),
+    algorithm: AlgorithmLiteral = Query("hybrid"),
+    exclude_seen: bool = Query(True),
     engine: RecommendationEngine = Depends(get_recommendation_engine),
 ):
     request = RecommendationRequest(
