@@ -11,7 +11,7 @@ import pytest
 # Mock Redis before importing cache
 sys.modules["redis"] = MagicMock()
 
-from src.utils.cache import CacheManager
+from src.utils.cache import CacheManager, JSON_PREFIX
 
 
 @pytest.fixture
@@ -36,7 +36,7 @@ class TestCacheManager:
 
     def test_cache_set_and_get(self, cache_builder):
         cache, mock_client = cache_builder()
-        mock_client.get.return_value = b'{"items": [1, 2, 3]}'
+        mock_client.get.return_value = JSON_PREFIX + b'{"items": [1, 2, 3]}'
 
         cache.set("user_123", {"items": [1, 2, 3]})
         result = cache.get("user_123")
