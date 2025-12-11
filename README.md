@@ -2,7 +2,9 @@
 
 Run the following commands **exactly in order** (each step has been verified).
 
-## Steps
+## Phase 1: Orchestration with Prefect
+
+### Steps:
 
 1. **Start every service**
 
@@ -59,12 +61,14 @@ Run the following commands **exactly in order** (each step has been verified).
       -it $CONTAINER python -m src.pipelines.retraining_flow
     ```
 
-## Expected Results
+### Expected Results
 
 - Prefect UI (http://localhost:4200) shows the flow run in green (success)
 - MLflow UI (http://localhost:5000) -> Models page lists `Recommendation_SVD` with the latest version promoted to `Production`
 
-## Model Hot-Reload Validation
+## Phase 2: Model Registry & Quality Gates
+
+### Steps:
 
 ```bash
 # 7. Exercise the model hot-reload API (confirm the Production model is loaded by the service)
@@ -88,9 +92,7 @@ Expected response (example):
 }
 ```
 
-## Development & Contributions
-
-### Phase 3: Quality Assurance & Automation
+## Phase 3: Quality Assurance & Automation
 
 **Install all dev tooling:**
 
@@ -131,7 +133,7 @@ make test            # unit tests only
 make test-smoke      # smoke tests
 ```
 
-### Phase 3 Tooling
+## Phase 3's Tooling
 
 | Tool | Purpose | Config File |
 |------|---------|-------------|
@@ -143,5 +145,31 @@ make test-smoke      # smoke tests
 | pytest | Unit testing | pyproject.toml |
 | pre-commit | Git hooks | .pre-commit-config.yaml |
 | Locust | Load testing | tests/locustfile.py |
+
+## Phase 4: CI/CD Pipeline
+
+In this phase, the entire MLOps stack becomes fully automated through GitHub Actions, achieving zero-touch testing and deployment.
+
+### Steps: 
+
+1. Add or update locally inside the project:
+   
+```bash
+.github/workflows/ci-cd.yml
+```
+
+2. Commit your changes
+ 
+```bash
+git add .
+git commit -m "feat: update recommendation engine"
+```
+
+3. Push to GitHub and this automatically triggers the full CI/CD workflow:
+
+```bash
+git push origin main
+```
+
 
 
