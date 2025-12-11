@@ -139,12 +139,12 @@ make test-smoke      # smoke tests
 **Locust Monitoring:
 Under a high load of 500, our system maintains a P95 latency of under 6 milliseconds, which ensures a smooth experience for our users.
 
-![System Architecture](images/Locust Monitoring.pic.jpg)
+![System Architecture](./images/Locust Monitoring.pic.jpg)
 
 **Grafana Dashboard Monitoring:
 Including API Error Rate (%), In-flight Requests, API Latency (p95), API Throughput (Requests Per Second)
 
-![System Architecture](images/Grafana Monitoring.pic.jpg)
+![System Architecture](./images/Grafana Monitoring.pic.jpg)
 
 
 ## Phase 3's Tooling
