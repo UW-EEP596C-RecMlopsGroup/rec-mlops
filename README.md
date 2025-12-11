@@ -140,7 +140,7 @@ make test-smoke      # smoke tests
 
 Under a high load of 500, our system maintains a P95 latency of under 6 milliseconds, which ensures a smooth experience for our users.
 
-![System Architecture](./images/Locust Monitoring.pic.jpg)
+![Locust Screenshot](./images/Locust Monitoring.pic.jpg)
 
 **Grafana Dashboard Monitoring:**
 
