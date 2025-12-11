@@ -2,6 +2,7 @@
 
 Run the following commands **exactly in order** (each step has been verified).
 
+
 ## Phase 1: Orchestration with Prefect
 
 ### Steps:
@@ -66,6 +67,7 @@ Run the following commands **exactly in order** (each step has been verified).
 - Prefect UI (http://localhost:4200) shows the flow run in green (success)
 - MLflow UI (http://localhost:5000) -> Models page lists `Recommendation_SVD` with the latest version promoted to `Production`
 
+
 ## Phase 2: Model Registry & Quality Gates
 
 ### Steps:
@@ -91,6 +93,7 @@ Expected response (example):
   }
 }
 ```
+
 
 ## Phase 3: Quality Assurance & Automation
 
@@ -133,6 +136,7 @@ make test            # unit tests only
 make test-smoke      # smoke tests
 ```
 
+
 ## Phase 3's Tooling
 
 | Tool | Purpose | Config File |
@@ -145,6 +149,7 @@ make test-smoke      # smoke tests
 | pytest | Unit testing | pyproject.toml |
 | pre-commit | Git hooks | .pre-commit-config.yaml |
 | Locust | Load testing | tests/locustfile.py |
+
 
 ## Phase 4: CI/CD Pipeline
 
